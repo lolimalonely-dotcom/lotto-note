@@ -2,24 +2,32 @@ import { TYPE_LABEL, TYPE_TONE } from "@/lib/rules";
 import { fmt } from "@/lib/summary";
 import type { EntryType } from "@/lib/types";
 
-export const card = "rounded-xl border border-line bg-surface";
+export const card = "rounded-2xl border border-line bg-surface";
 
+/** ปุ่มทุกตัวสูงอย่างน้อย 48px เพื่อให้จิ้มง่ายทั้งบนมือถือและเมาส์ */
 export const btn =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium transition hover:bg-surface-2 active:scale-[.98] disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-line bg-surface px-4 text-base font-semibold transition hover:bg-surface-2 active:scale-[.98] disabled:pointer-events-none disabled:opacity-40";
 
 export const btnPrimary =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg border border-transparent bg-accent px-3 py-2 text-sm font-semibold text-accent-fg transition hover:opacity-90 active:scale-[.98] disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-transparent bg-accent px-4 text-base font-bold text-accent-fg transition hover:opacity-90 active:scale-[.98] disabled:pointer-events-none disabled:opacity-40";
 
-export const btnGhost =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1 text-sm text-muted transition hover:bg-surface-2 hover:text-foreground";
+export const btnQuiet =
+  "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-base text-muted transition hover:bg-surface-2 hover:text-foreground";
 
 export const input =
-  "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/25";
+  "w-full rounded-xl border-2 border-line bg-surface px-4 py-3 text-lg outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/20";
 
-export function TypeBadge({ type, className = "" }: { type: EntryType; className?: string }) {
+/** ช่องกรอกตัวเลข ตัวใหญ่พิเศษ */
+export const numInput = `${input} keypad-input h-16 text-center text-3xl font-bold`;
+
+export const label = "mb-2 block text-base font-semibold text-muted";
+
+export function TypeBadge({ type, big = false }: { type: EntryType; big?: boolean }) {
   return (
     <span
-      className={`inline-flex min-w-11 items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold ${TYPE_TONE[type]} ${className}`}
+      className={`inline-flex items-center justify-center rounded-lg font-bold ${TYPE_TONE[type]} ${
+        big ? "min-w-16 px-2.5 py-1 text-lg" : "min-w-14 px-2 py-1 text-base"
+      }`}
     >
       {TYPE_LABEL[type]}
     </span>
@@ -31,7 +39,7 @@ export function Money({ value, className = "" }: { value: number; className?: st
 }
 
 export function Stat({
-  label,
+  label: text,
   value,
   sub,
   accent = false,
@@ -43,20 +51,18 @@ export function Stat({
 }) {
   return (
     <div className={`${card} px-4 py-3`}>
-      <div className="text-xs text-muted">{label}</div>
-      <div
-        className={`mt-0.5 text-2xl font-bold tabular-nums ${accent ? "text-accent" : ""}`}
-      >
+      <div className="text-sm text-muted">{text}</div>
+      <div className={`mt-1 text-3xl font-extrabold tabular-nums ${accent ? "text-accent" : ""}`}>
         {value}
       </div>
-      {sub ? <div className="mt-0.5 text-xs text-muted">{sub}</div> : null}
+      {sub ? <div className="mt-0.5 text-sm text-muted">{sub}</div> : null}
     </div>
   );
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-1 px-6 py-12 text-center text-sm text-muted">
+    <div className="flex flex-col items-center justify-center gap-1 px-6 py-14 text-center text-base text-muted">
       {children}
     </div>
   );

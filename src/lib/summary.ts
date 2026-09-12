@@ -1,4 +1,4 @@
-import { ALL_TYPES, TYPE_LABEL } from "./rules";
+import { TYPE_LABEL } from "./rules";
 import type { Entry, EntryType } from "./types";
 
 export interface Totals {
@@ -51,39 +51,48 @@ export function summarizeByName(entries: Entry[]): NameSummary[] {
 
 export interface CodeSummary {
   code: string;
+  /** จำนวนบรรทัดที่ลงเลขนี้ */
   count: number;
   total: number;
   byType: Record<EntryType, Totals>;
+  /** ชื่อคนที่ลงเลขนี้ ไม่ซ้ำ */
   names: string[];
+  /** ทุกบรรทัดของเลขนี้ เรียงยอดมากไปน้อย */
+  rows: Entry[];
 }
 
-/** สรุปยอดต่อ "เลข" ทุกชื่อรวมกัน — เรียงยอดมากไปน้อย (ดูความเสี่ยงต่อเลข) */
+/** สรุปต่อ "เลข" ทุกชื่อรวมกัน — เรียงยอดมากไปน้อย (ดูว่าเลขไหนรับหนัก) */
 export function summarizeByCode(entries: Entry[]): CodeSummary[] {
-  const map = new Map<string, CodeSummary & { nameSet: Set<string> }>();
+  const map = new Map<string, CodeSummary>();
   for (const e of entries) {
     let row = map.get(e.code);
     if (!row) {
-      row = {
-        code: e.code,
-        count: 0,
-        total: 0,
-        byType: emptyByType(),
-        names: [],
-        nameSet: new Set<string>(),
-      };
+      row = { code: e.code, count: 0, total: 0, byType: emptyByType(), names: [], rows: [] };
       map.set(e.code, row);
     }
     row.count += 1;
     row.total += e.amount;
-    row.nameSet.add(e.name);
+    row.rows.push(e);
     bump(row.byType, e);
   }
-  return [...map.values()]
-    .map(({ nameSet, ...rest }) => ({
-      ...rest,
-      names: [...nameSet].sort((a, b) => a.localeCompare(b, "th")),
-    }))
-    .sort((a, b) => b.total - a.total || a.code.localeCompare(b.code));
+  for (const row of map.values()) {
+    row.names = [...new Set(row.rows.map((r) => r.name))].sort((a, b) => a.localeCompare(b, "th"));
+    row.rows.sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name, "th"));
+  }
+  return [...map.values()].sort((a, b) => b.total - a.total || a.code.localeCompare(b.code));
+}
+
+/**
+ * เลขที่มีคนลงซ้ำกันหลายครั้ง — เรียงตามจำนวนครั้งที่ซ้ำมากไปน้อย
+ * ใช้ดูว่าเลขไหนคนแห่กันซื้อ ต้องระวังเป็นพิเศษ
+ */
+export function duplicateCodes(entries: Entry[]): CodeSummary[] {
+  return summarizeByCode(entries)
+    .filter((row) => row.count > 1)
+    .sort(
+      (a, b) =>
+        b.count - a.count || b.total - a.total || a.code.localeCompare(b.code),
+    );
 }
 
 export interface GrandTotals {
@@ -128,4 +137,3 @@ export function toCsv(entries: Entry[]): string {
   return "﻿" + [head.join(","), ...body].join("\r\n");
 }
 
-export { ALL_TYPES };

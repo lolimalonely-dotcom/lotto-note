@@ -15,6 +15,7 @@ import type { DraftRow, Entry } from "./types";
 
 const LS_KEY = "lotto-note.v1";
 const ROUND_KEY = `${LS_KEY}.round`;
+const ROUND_LIST_KEY = `${LS_KEY}.roundList`;
 const NAME_KEY = `${LS_KEY}.name`;
 const TABLE = "entries";
 const SELECT = "id, round, name, code, type, amount, batch_id, created_at";
@@ -64,6 +65,40 @@ function getRoundServerSnapshot(): string {
 
 function writeRound(value: string) {
   window.localStorage.setItem(ROUND_KEY, value);
+  emit();
+}
+
+/* --- รอบที่ผู้ใช้สร้างเอง ---
+   รอบที่มีรายการแล้วจะถูกดึงจากข้อมูลอยู่แล้ว ส่วนรอบที่เพิ่งสร้างและยังไม่มีรายการ
+   เก็บไว้ตรงนี้ เพื่อให้เลือกจากดรอปดาวน์ได้ทันทีโดยไม่ต้องพิมพ์ใหม่ */
+
+const NO_ROUNDS: string[] = [];
+let roundListCache: string[] | null = null;
+
+function getRoundListSnapshot(): string[] {
+  if (roundListCache === null) {
+    try {
+      const raw = window.localStorage.getItem(ROUND_LIST_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      roundListCache = Array.isArray(parsed) ? (parsed as string[]) : NO_ROUNDS;
+    } catch {
+      roundListCache = NO_ROUNDS;
+    }
+  }
+  return roundListCache;
+}
+
+function getRoundListServerSnapshot(): string[] {
+  return NO_ROUNDS;
+}
+
+function writeRoundList(next: string[]) {
+  roundListCache = next;
+  try {
+    window.localStorage.setItem(ROUND_LIST_KEY, JSON.stringify(next));
+  } catch {
+    /* โควตาเต็ม */
+  }
   emit();
 }
 
@@ -165,7 +200,12 @@ interface StoreValue {
 
   round: string;
   setRound(round: string): void;
+  /** รอบทั้งหมดที่เลือกได้ (รอบที่มีข้อมูล + รอบที่สร้างไว้เอง) ใหม่สุดขึ้นก่อน */
   rounds: string[];
+  /** สร้างรอบใหม่แล้วสลับไปที่รอบนั้นเลย คืน false ถ้าชื่อซ้ำหรือว่าง */
+  createRound(name: string): boolean;
+  /** ลบรอบออกจากดรอปดาวน์ (ใช้ตอนตั้งชื่อผิด) — ทำได้เฉพาะรอบที่ยังไม่มีรายการ */
+  forgetRound(name: string): void;
 
   /** ชื่อรายการที่กำลังคีย์ — เก็บในสโตร์ จะได้ไม่หายตอนสลับไปดูแดชบอร์ดแล้วกลับมา */
   name: string;
@@ -206,6 +246,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const round = useSyncExternalStore(subscribe, getRoundSnapshot, getRoundServerSnapshot);
   const name = useSyncExternalStore(subscribe, getNameSnapshot, getNameServerSnapshot);
   const allLocal = useSyncExternalStore(subscribe, getLocalSnapshot, getLocalServerSnapshot);
+  const savedRounds = useSyncExternalStore(
+    subscribe,
+    getRoundListSnapshot,
+    getRoundListServerSnapshot,
+  );
 
   const clearError = useCallback(() => setError(null), []);
   const setRound = useCallback((r: string) => writeRound(r), []);
@@ -270,12 +315,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [mode, cloudRows, allLocal, round]);
 
   const rounds = useMemo(() => {
-    const base =
-      mode === "cloud"
-        ? cloudRounds
-        : [...new Set(allLocal.map((e) => e.round))].sort().reverse();
-    return base.includes(round) ? base : [round, ...base];
-  }, [mode, cloudRounds, allLocal, round]);
+    const withData =
+      mode === "cloud" ? cloudRounds : [...new Set(allLocal.map((e) => e.round))];
+    const all = new Set<string>([...withData, ...savedRounds, round]);
+    return [...all].filter(Boolean).sort().reverse();
+  }, [mode, cloudRounds, allLocal, savedRounds, round]);
+
+  const createRound = useCallback(
+    (raw: string): boolean => {
+      const next = raw.trim();
+      if (next === "" || rounds.includes(next)) return false;
+      writeRoundList([...getRoundListSnapshot(), next]);
+      writeRound(next);
+      return true;
+    },
+    [rounds],
+  );
+
+  const forgetRound = useCallback((target: string) => {
+    writeRoundList(getRoundListSnapshot().filter((r) => r !== target));
+  }, []);
 
   const names = useMemo(
     () => [...new Set(entries.map((e) => e.name))].sort((a, b) => a.localeCompare(b, "th")),
@@ -416,6 +475,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     round,
     setRound,
     rounds,
+    createRound,
+    forgetRound,
     name,
     setName,
     entries,
