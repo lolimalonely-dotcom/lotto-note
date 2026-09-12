@@ -1,0 +1,131 @@
+import { ALL_TYPES, TYPE_LABEL } from "./rules";
+import type { Entry, EntryType } from "./types";
+
+export interface Totals {
+  count: number;
+  amount: number;
+}
+
+function emptyByType(): Record<EntryType, Totals> {
+  return {
+    บ: { count: 0, amount: 0 },
+    ล: { count: 0, amount: 0 },
+    ตรง: { count: 0, amount: 0 },
+    ต: { count: 0, amount: 0 },
+  };
+}
+
+function bump(target: Record<EntryType, Totals>, e: Entry) {
+  target[e.type].count += 1;
+  target[e.type].amount += e.amount;
+}
+
+export interface NameSummary {
+  name: string;
+  count: number;
+  total: number;
+  byType: Record<EntryType, Totals>;
+  entries: Entry[];
+}
+
+/** สรุปยอดต่อ "ชื่อรายการ" — เรียงตามชื่อ */
+export function summarizeByName(entries: Entry[]): NameSummary[] {
+  const map = new Map<string, NameSummary>();
+  for (const e of entries) {
+    let row = map.get(e.name);
+    if (!row) {
+      row = { name: e.name, count: 0, total: 0, byType: emptyByType(), entries: [] };
+      map.set(e.name, row);
+    }
+    row.count += 1;
+    row.total += e.amount;
+    row.entries.push(e);
+    bump(row.byType, e);
+  }
+  for (const row of map.values()) {
+    // ในบิลเรียงตามลำดับที่คีย์ (เก่า -> ใหม่) อ่านง่ายกว่าเวลาทาน
+    row.entries.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "th"));
+}
+
+export interface CodeSummary {
+  code: string;
+  count: number;
+  total: number;
+  byType: Record<EntryType, Totals>;
+  names: string[];
+}
+
+/** สรุปยอดต่อ "เลข" ทุกชื่อรวมกัน — เรียงยอดมากไปน้อย (ดูความเสี่ยงต่อเลข) */
+export function summarizeByCode(entries: Entry[]): CodeSummary[] {
+  const map = new Map<string, CodeSummary & { nameSet: Set<string> }>();
+  for (const e of entries) {
+    let row = map.get(e.code);
+    if (!row) {
+      row = {
+        code: e.code,
+        count: 0,
+        total: 0,
+        byType: emptyByType(),
+        names: [],
+        nameSet: new Set<string>(),
+      };
+      map.set(e.code, row);
+    }
+    row.count += 1;
+    row.total += e.amount;
+    row.nameSet.add(e.name);
+    bump(row.byType, e);
+  }
+  return [...map.values()]
+    .map(({ nameSet, ...rest }) => ({
+      ...rest,
+      names: [...nameSet].sort((a, b) => a.localeCompare(b, "th")),
+    }))
+    .sort((a, b) => b.total - a.total || a.code.localeCompare(b.code));
+}
+
+export interface GrandTotals {
+  count: number;
+  total: number;
+  names: number;
+  codes: number;
+  byType: Record<EntryType, Totals>;
+}
+
+export function grandTotals(entries: Entry[]): GrandTotals {
+  const byType = emptyByType();
+  let total = 0;
+  for (const e of entries) {
+    total += e.amount;
+    bump(byType, e);
+  }
+  return {
+    count: entries.length,
+    total,
+    names: new Set(entries.map((e) => e.name)).size,
+    codes: new Set(entries.map((e) => e.code)).size,
+    byType,
+  };
+}
+
+export const fmt = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 2 });
+
+/** ตารางสรุปเป็น CSV (มี BOM เพื่อให้ Excel อ่านภาษาไทยถูก) */
+export function toCsv(entries: Entry[]): string {
+  const esc = (v: string | number) => {
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const head = ["งวด", "ชื่อรายการ", "ประเภท", "รหัส", "จำนวน", "เวลาที่คีย์"];
+  const body = entries
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, "th") || a.createdAt.localeCompare(b.createdAt))
+    .map((e) =>
+      [e.round, e.name, TYPE_LABEL[e.type], e.code, e.amount, e.createdAt].map(esc).join(","),
+    );
+  return "﻿" + [head.join(","), ...body].join("\r\n");
+}
+
+export { ALL_TYPES };
