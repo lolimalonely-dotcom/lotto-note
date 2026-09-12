@@ -1,4 +1,4 @@
-import { TYPE_LABEL } from "./rules";
+import { ALL_TYPES, TYPE_LABEL } from "./rules";
 import type { Entry, EntryType } from "./types";
 
 export interface Totals {
@@ -7,12 +7,10 @@ export interface Totals {
 }
 
 function emptyByType(): Record<EntryType, Totals> {
-  return {
-    บ: { count: 0, amount: 0 },
-    ล: { count: 0, amount: 0 },
-    ตรง: { count: 0, amount: 0 },
-    ต: { count: 0, amount: 0 },
-  };
+  // สร้างจาก ALL_TYPES เพื่อให้เพิ่มประเภทใหม่แล้วไม่ต้องมาแก้ตรงนี้อีก
+  return Object.fromEntries(
+    ALL_TYPES.map((t) => [t, { count: 0, amount: 0 }]),
+  ) as Record<EntryType, Totals>;
 }
 
 function bump(target: Record<EntryType, Totals>, e: Entry) {

@@ -11,12 +11,21 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabase, isCloud } from "./supabase";
-import type { DraftRow, Entry } from "./types";
+import {
+  DEFAULT_RATES,
+  EMPTY_RESULT,
+  type DraftRow,
+  type DrawResult,
+  type Entry,
+  type PayoutRates,
+} from "./types";
 
 const LS_KEY = "lotto-note.v1";
 const ROUND_KEY = `${LS_KEY}.round`;
 const ROUND_LIST_KEY = `${LS_KEY}.roundList`;
 const NAME_KEY = `${LS_KEY}.name`;
+const RESULTS_KEY = `${LS_KEY}.results`;
+const RATES_KEY = `${LS_KEY}.rates`;
 const TABLE = "entries";
 const SELECT = "id, round, name, code, type, amount, batch_id, created_at";
 
@@ -114,6 +123,69 @@ function getNameServerSnapshot(): string {
 
 function writeName(value: string) {
   window.localStorage.setItem(NAME_KEY, value);
+  emit();
+}
+
+/* --- ผลรางวัลของแต่ละรอบ และอัตราจ่าย (โหมดออฟไลน์) --- */
+
+const NO_RESULTS: Record<string, DrawResult> = {};
+let resultsCache: Record<string, DrawResult> | null = null;
+
+function getResultsSnapshot(): Record<string, DrawResult> {
+  if (resultsCache === null) {
+    try {
+      const raw = window.localStorage.getItem(RESULTS_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      resultsCache = parsed && typeof parsed === "object" ? parsed : NO_RESULTS;
+    } catch {
+      resultsCache = NO_RESULTS;
+    }
+  }
+  return resultsCache ?? NO_RESULTS;
+}
+
+function getResultsServerSnapshot(): Record<string, DrawResult> {
+  return NO_RESULTS;
+}
+
+function writeResults(next: Record<string, DrawResult>) {
+  resultsCache = next;
+  try {
+    window.localStorage.setItem(RESULTS_KEY, JSON.stringify(next));
+  } catch {
+    /* โควตาเต็ม */
+  }
+  emit();
+}
+
+let ratesCache: PayoutRates | null = null;
+
+function getRatesSnapshot(): PayoutRates {
+  if (ratesCache === null) {
+    try {
+      const raw = window.localStorage.getItem(RATES_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      ratesCache = parsed && typeof parsed === "object"
+        ? { ...DEFAULT_RATES, ...parsed }
+        : DEFAULT_RATES;
+    } catch {
+      ratesCache = DEFAULT_RATES;
+    }
+  }
+  return ratesCache ?? DEFAULT_RATES;
+}
+
+function getRatesServerSnapshot(): PayoutRates {
+  return DEFAULT_RATES;
+}
+
+function writeRates(next: PayoutRates) {
+  ratesCache = next;
+  try {
+    window.localStorage.setItem(RATES_KEY, JSON.stringify(next));
+  } catch {
+    /* โควตาเต็ม */
+  }
   emit();
 }
 
@@ -215,6 +287,13 @@ interface StoreValue {
   entries: Entry[];
   names: string[];
 
+  /** ผลรางวัลของรอบที่เลือกอยู่ */
+  result: DrawResult;
+  setResult(next: DrawResult): Promise<void>;
+  /** อัตราจ่าย ใช้ร่วมกันทุกรอบ */
+  rates: PayoutRates;
+  setRates(next: PayoutRates): Promise<void>;
+
   add(name: string, rows: DraftRow[]): Promise<number>;
   removeOne(id: string): Promise<void>;
   removeBatch(batchId: string): Promise<void>;
@@ -251,6 +330,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     getRoundListSnapshot,
     getRoundListServerSnapshot,
   );
+  const localResults = useSyncExternalStore(
+    subscribe,
+    getResultsSnapshot,
+    getResultsServerSnapshot,
+  );
+  const localRates = useSyncExternalStore(subscribe, getRatesSnapshot, getRatesServerSnapshot);
+  const [cloudResults, setCloudResults] = useState<Record<string, DrawResult>>({});
+  const [cloudRates, setCloudRates] = useState<PayoutRates | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
   const setRound = useCallback((r: string) => writeRound(r), []);
@@ -277,9 +364,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const slow = window.setTimeout(() => setLoading(true), 150);
     try {
       const sb = getSupabase();
-      const [rowsRes, roundsRes] = await Promise.all([
+      const [rowsRes, roundsRes, resultsRes, ratesRes] = await Promise.all([
         sb.from(TABLE).select(SELECT).eq("round", round).order("created_at", { ascending: false }),
         sb.from(TABLE).select("round").limit(10000),
+        sb.from("round_results").select("round, top3, bottom2, bottom3"),
+        sb.from("payout_rates").select("rates").maybeSingle(),
       ]);
 
       if (rowsRes.error) {
@@ -293,6 +382,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ((roundsRes.data ?? []) as { round: string }[]).map((r) => r.round),
         );
         setCloudRounds([...seen].sort().reverse());
+      }
+
+      // ตารางสองอันนี้มาจาก migration 0002 — ถ้ายังไม่ได้รัน ก็ใช้ค่าที่เก็บในเครื่องแทน
+      if (!resultsRes.error) {
+        const map: Record<string, DrawResult> = {};
+        for (const r of (resultsRes.data ?? []) as Array<DrawResult & { round: string }>) {
+          map[r.round] = { top3: r.top3 ?? "", bottom2: r.bottom2 ?? "", bottom3: r.bottom3 ?? "" };
+        }
+        setCloudResults(map);
+      }
+      if (!ratesRes.error && ratesRes.data) {
+        const stored = (ratesRes.data as { rates: Partial<PayoutRates> | null }).rates;
+        setCloudRates(stored ? { ...DEFAULT_RATES, ...stored } : DEFAULT_RATES);
       }
     } finally {
       window.clearTimeout(slow);
@@ -335,6 +437,40 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const forgetRound = useCallback((target: string) => {
     writeRoundList(getRoundListSnapshot().filter((r) => r !== target));
   }, []);
+
+  /* ---------------- ผลรางวัล / อัตราจ่าย ---------------- */
+
+  const result: DrawResult =
+    (mode === "cloud" ? cloudResults[round] : localResults[round]) ?? EMPTY_RESULT;
+
+  const rates: PayoutRates = mode === "cloud" ? (cloudRates ?? localRates) : localRates;
+
+  const setResult = useCallback(
+    async (next: DrawResult) => {
+      // เก็บลงเครื่องเสมอ เพื่อให้ใช้ต่อได้แม้ตารางบนคลาวด์ยังไม่พร้อม
+      writeResults({ ...getResultsSnapshot(), [round]: next });
+      if (mode === "local") return;
+      setCloudResults((prev) => ({ ...prev, [round]: next }));
+      const { error: err } = await getSupabase()
+        .from("round_results")
+        .upsert({ round, ...next, updated_at: new Date().toISOString() }, { onConflict: "user_id,round" });
+      if (err) setError(`บันทึกผลรางวัลขึ้นคลาวด์ไม่สำเร็จ (${err.message}) — ยังเก็บไว้ในเครื่องนี้ให้แล้ว`);
+    },
+    [mode, round],
+  );
+
+  const setRates = useCallback(
+    async (next: PayoutRates) => {
+      writeRates(next);
+      if (mode === "local") return;
+      setCloudRates(next);
+      const { error: err } = await getSupabase()
+        .from("payout_rates")
+        .upsert({ rates: next, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+      if (err) setError(`บันทึกอัตราจ่ายขึ้นคลาวด์ไม่สำเร็จ (${err.message}) — ยังเก็บไว้ในเครื่องนี้ให้แล้ว`);
+    },
+    [mode],
+  );
 
   const names = useMemo(
     () => [...new Set(entries.map((e) => e.name))].sort((a, b) => a.localeCompare(b, "th")),
@@ -382,7 +518,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         .select(SELECT);
 
       if (err) {
-        setError(err.message);
+        // ฐานข้อมูลยังเป็นสคีมาเก่า ที่ยังไม่รู้จักเลขวิ่งกับ 3 ตัวล่าง
+        setError(
+          /entries_type_matches_code|entries_code_format/.test(err.message)
+            ? "ฐานข้อมูลยังไม่รองรับประเภทนี้ — ต้องรันไฟล์ supabase/migrations/0002_check_results.sql ใน Supabase ก่อน (SQL Editor)"
+            : err.message,
+        );
         return 0;
       }
       const made = ((data ?? []) as DbRow[]).map(fromDb);
@@ -479,6 +620,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     forgetRound,
     name,
     setName,
+    result,
+    setResult,
+    rates,
+    setRates,
     entries,
     names,
     add,

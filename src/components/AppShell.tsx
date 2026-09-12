@@ -221,9 +221,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : (
         <main className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-4">
           <RoundBar />
-          <nav className="no-print flex gap-2 rounded-2xl border border-line bg-surface p-1.5">
+          <nav className="no-print flex gap-1.5 rounded-2xl border border-line bg-surface p-1.5">
             <NavTab href="/" text="คีย์รายการ" />
             <NavTab href="/dashboard" text="สรุปยอด" />
+            <NavTab href="/check" text="ตรวจรางวัล" />
           </nav>
           {children}
         </main>

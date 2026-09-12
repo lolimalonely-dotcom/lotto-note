@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { permutations } from "@/lib/permute";
-import { isValidCode, TYPE_FULL, TYPE_LABEL, typesForCode } from "@/lib/rules";
+import { canPermute, isValidCode, TYPE_FULL, TYPE_LABEL, typesForCode } from "@/lib/rules";
 import { useStore } from "@/lib/store";
 import { fmt } from "@/lib/summary";
 import type { DraftRow, Entry, EntryType } from "@/lib/types";
@@ -135,7 +135,7 @@ export function EntryScreen() {
     const len = digits.length;
     if (len === prevLen.current) return;
     prevLen.current = len;
-    if (len !== 2 && len !== 3) return;
+    if (len < 1 || len > 3) return;
     const valid = typesForCode(digits);
     setPicked((current) => {
       const keep = current.filter((t) => valid.includes(t));
@@ -153,7 +153,9 @@ export function EntryScreen() {
     );
   };
 
-  const codes = codeOk && permute ? permutations(digits) : codeOk ? [digits] : [];
+  const permutable = canPermute(digits);
+  const permuteOn = permute && permutable;
+  const codes = codeOk ? (permuteOn ? permutations(digits) : [digits]) : [];
 
   const rows: DraftRow[] = [];
   for (const c of codes) {
@@ -198,7 +200,7 @@ export function EntryScreen() {
         {/* ---------- รหัส ---------- */}
         <div>
           <label className={label} htmlFor="code">
-            รหัส (ใส่ 2 หรือ 3 ตัวเลข)
+            รหัส — 1 ตัว = เลขวิ่ง · 2 ตัว = บน/ล่าง · 3 ตัว = ตรง/โต๊ด/ล่าง
           </label>
           <input
             id="code"
@@ -214,21 +216,21 @@ export function EntryScreen() {
 
           <button
             onClick={() => setPermute((v) => !v)}
-            disabled={!codeOk}
+            disabled={!permutable}
             className={`mt-3 flex min-h-12 w-full items-center gap-3 rounded-xl border-2 px-4 text-left text-base font-semibold transition disabled:opacity-40 ${
-              permute ? "border-accent bg-accent/10" : "border-line hover:bg-surface-2"
+              permuteOn ? "border-accent bg-accent/10" : "border-line hover:bg-surface-2"
             }`}
           >
             <span
               className={`flex size-7 shrink-0 items-center justify-center rounded-md border-2 text-base ${
-                permute ? "border-accent bg-accent text-accent-fg" : "border-line"
+                permuteOn ? "border-accent bg-accent text-accent-fg" : "border-line"
               }`}
             >
-              {permute ? "✓" : ""}
+              {permuteOn ? "✓" : ""}
             </span>
             <span>
               กลับเลขให้ด้วย
-              {permute && codeOk ? (
+              {permuteOn ? (
                 <span className="ml-1 font-normal text-muted">
                   → {codes.join(", ")} ({codes.length} ตัว)
                 </span>
@@ -239,13 +241,13 @@ export function EntryScreen() {
 
         {/* ---------- ประเภท ---------- */}
         <div>
-          <span className={label}>ประเภท (จิ้มเลือก เลือกได้ทั้ง 2 อย่าง)</span>
+          <span className={label}>ประเภท (จิ้มเลือก เลือกพร้อมกันหลายอย่างได้)</span>
           {!codeOk ? (
             <p className="rounded-xl bg-surface-2 px-4 py-4 text-base text-muted">
               ใส่รหัสก่อน แล้วปุ่มประเภทจะขึ้นมาให้เลือก
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {allowed.map((t) => {
                 const on = picked.includes(t);
                 return (
@@ -270,7 +272,7 @@ export function EntryScreen() {
         {picked.length > 0 ? (
           <div>
             <span className={label}>
-              จำนวน{permute ? " (ต่อเลข 1 ตัว)" : ""}
+              จำนวน{permuteOn ? " (ต่อเลข 1 ตัว)" : ""}
             </span>
             <div className="space-y-3">
               {allowed
