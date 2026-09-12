@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
+import { configError } from "@/lib/supabase";
 import { btn, btnGhost, btnPrimary, card, input } from "./ui";
 
 function NavTab({ href, label }: { href: string; label: string }) {
@@ -135,6 +136,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </div>
       </header>
+
+      {configError ? (
+        <div className="no-print mx-auto mt-3 w-full max-w-6xl px-4">
+          <div className="rounded-lg border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+            <b>ตั้งค่า Supabase ไม่ถูกต้อง — ตอนนี้กำลังใช้โหมดออฟไลน์</b>
+            <p className="mt-1">{configError}</p>
+            <p className="mt-1 text-xs opacity-80">
+              แก้ที่ Vercel → Settings → Environment Variables แล้ว Redeploy หนึ่งครั้ง
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="no-print mx-auto mt-3 w-full max-w-6xl px-4">
