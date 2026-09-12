@@ -6,14 +6,15 @@ function sortedDigits(value: string): string {
 }
 
 export function hasAnyResult(r: DrawResult): boolean {
-  return r.top3 !== "" || r.bottom2 !== "" || r.bottom3 !== "";
+  return r.top2 !== "" || r.bottom2 !== "" || r.top3 !== "" || r.bottom3 !== "";
 }
 
-/** ผลรางวัลช่องไหนที่ประเภทนี้ต้องใช้ — ไว้บอกผู้ใช้ว่ายังขาดอะไร */
+/**
+ * ผลรางวัลช่องไหนที่ประเภทนี้ต้องใช้
+ * รหัสกี่หลักก็ใช้ผลของหลักนั้น ไม่มีการตัดหลักข้ามกัน
+ */
 const NEEDS: Record<Entry["type"], keyof DrawResult> = {
-  วบ: "top3",
-  วล: "bottom2",
-  บ: "top3",
+  บ: "top2",
   ล: "bottom2",
   ตรง: "top3",
   ต: "top3",
@@ -21,28 +22,22 @@ const NEEDS: Record<Entry["type"], keyof DrawResult> = {
 };
 
 export const RESULT_LABEL: Record<keyof DrawResult, string> = {
-  top3: "3 ตัวบน",
+  top2: "2 ตัวบน",
   bottom2: "2 ตัวล่าง",
+  top3: "3 ตัวตรง",
   bottom3: "3 ตัวล่าง",
 };
 
 /**
- * ถูกรางวัลไหม — คืน null เมื่อยังใส่ผลของช่องที่ต้องใช้ไม่ครบ จึงยังตรวจไม่ได้
- *
+ * ถูกรางวัลไหม — คืน null เมื่อยังไม่ได้ใส่ผลของช่องที่ต้องใช้ จึงยังตรวจไม่ได้
  * โต๊ดนับว่าถูกด้วยเมื่อผลออกตรงเป๊ะ (ตามที่ตกลงกันไว้)
- * เลขวิ่งนับว่าถูกครั้งเดียว แม้เลขนั้นจะโผล่ในผลมากกว่าหนึ่งครั้ง
  */
 export function isWinner(e: Entry, r: DrawResult): boolean | null {
-  const need = r[NEEDS[e.type]];
-  if (need === "") return null;
+  if (r[NEEDS[e.type]] === "") return null;
 
   switch (e.type) {
-    case "วบ":
-      return r.top3.includes(e.code);
-    case "วล":
-      return r.bottom2.includes(e.code);
     case "บ":
-      return r.top3.slice(-2) === e.code;
+      return r.top2 === e.code;
     case "ล":
       return r.bottom2 === e.code;
     case "ตรง":

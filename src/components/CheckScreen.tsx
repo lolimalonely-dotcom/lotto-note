@@ -13,8 +13,9 @@ import { btn, btnPrimary, card, Empty, input, Money, numInput, TypeBadge } from 
 /* ------------------------------------------------------------------ */
 
 const FIELDS: Array<{ key: keyof DrawResult; digits: number }> = [
-  { key: "top3", digits: 3 },
+  { key: "top2", digits: 2 },
   { key: "bottom2", digits: 2 },
+  { key: "top3", digits: 3 },
   { key: "bottom3", digits: 3 },
 ];
 
@@ -31,10 +32,7 @@ function ResultForm() {
     setSaved(false);
   }
 
-  const dirty =
-    draft.top3 !== result.top3 ||
-    draft.bottom2 !== result.bottom2 ||
-    draft.bottom3 !== result.bottom3;
+  const dirty = FIELDS.some((f) => draft[f.key] !== result[f.key]);
 
   const badField = FIELDS.find(
     (f) => draft[f.key] !== "" && draft[f.key].length !== f.digits,

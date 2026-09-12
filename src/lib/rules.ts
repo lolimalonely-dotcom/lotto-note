@@ -1,12 +1,10 @@
 import type { EntryType } from "./types";
 
 /** เรียงตามลำดับที่อยากให้แสดงในตารางสรุป */
-export const ALL_TYPES: EntryType[] = ["วบ", "วล", "บ", "ล", "ตรง", "ต", "ล3"];
+export const ALL_TYPES: EntryType[] = ["บ", "ล", "ตรง", "ต", "ล3"];
 
 /** ป้ายสั้น ใช้ในตารางและรายการ */
 export const TYPE_LABEL: Record<EntryType, string> = {
-  วบ: "วิ่งบน",
-  วล: "วิ่งล่าง",
   บ: "บ.",
   ล: "ล.",
   ตรง: "ตรง",
@@ -16,18 +14,14 @@ export const TYPE_LABEL: Record<EntryType, string> = {
 
 /** คำอธิบายเต็ม ใช้บนปุ่มเลือกประเภท */
 export const TYPE_FULL: Record<EntryType, string> = {
-  วบ: "วิ่งบน",
-  วล: "วิ่งล่าง",
   บ: "บ. (2 ตัวบน)",
   ล: "ล. (2 ตัวล่าง)",
-  ตรง: "ตรง (3 ตัวบน)",
+  ตรง: "ตรง",
   ต: "ต. (โต๊ด)",
   ล3: "ล. (3 ตัวล่าง)",
 };
 
 export const TYPE_TONE: Record<EntryType, string> = {
-  วบ: "bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300",
-  วล: "bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-300",
   บ: "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300",
   ล: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
   ตรง: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300",
@@ -40,17 +34,16 @@ export const TYPE_TONE: Record<EntryType, string> = {
  * ลำดับในอาเรย์คือลำดับที่แสดงบนปุ่ม
  */
 export function typesForCode(code: string): EntryType[] {
-  if (code.length === 1) return ["วบ", "วล"];
   if (code.length === 2) return ["บ", "ล"];
   if (code.length === 3) return ["ตรง", "ต", "ล3"];
   return [];
 }
 
 export function isValidCode(code: string): boolean {
-  return /^\d{1,3}$/.test(code);
+  return /^\d{2,3}$/.test(code);
 }
 
-/** กลับเลขมีความหมายเฉพาะรหัสตั้งแต่ 2 หลักขึ้นไป */
+/** กลับเลขใช้ได้กับทุกรหัสที่ถูกต้อง (2 หรือ 3 หลัก) */
 export function canPermute(code: string): boolean {
-  return /^\d{2,3}$/.test(code);
+  return isValidCode(code);
 }

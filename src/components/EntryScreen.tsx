@@ -200,7 +200,7 @@ export function EntryScreen() {
         {/* ---------- รหัส ---------- */}
         <div>
           <label className={label} htmlFor="code">
-            รหัส — 1 ตัว = เลขวิ่ง · 2 ตัว = บน/ล่าง · 3 ตัว = ตรง/โต๊ด/ล่าง
+            รหัส — 2 ตัว = บน/ล่าง · 3 ตัว = ตรง/โต๊ด/ล่าง
           </label>
           <input
             id="code"

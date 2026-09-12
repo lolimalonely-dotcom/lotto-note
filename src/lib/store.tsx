@@ -14,6 +14,8 @@ import { getSupabase, isCloud } from "./supabase";
 import {
   DEFAULT_RATES,
   EMPTY_RESULT,
+  normalizeRates,
+  normalizeResult,
   type DraftRow,
   type DrawResult,
   type Entry,
@@ -165,9 +167,7 @@ function getRatesSnapshot(): PayoutRates {
     try {
       const raw = window.localStorage.getItem(RATES_KEY);
       const parsed = raw ? JSON.parse(raw) : null;
-      ratesCache = parsed && typeof parsed === "object"
-        ? { ...DEFAULT_RATES, ...parsed }
-        : DEFAULT_RATES;
+      ratesCache = normalizeRates(parsed);
     } catch {
       ratesCache = DEFAULT_RATES;
     }
@@ -367,7 +367,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const [rowsRes, roundsRes, resultsRes, ratesRes] = await Promise.all([
         sb.from(TABLE).select(SELECT).eq("round", round).order("created_at", { ascending: false }),
         sb.from(TABLE).select("round").limit(10000),
-        sb.from("round_results").select("round, top3, bottom2, bottom3"),
+        sb.from("round_results").select("round, top2, bottom2, top3, bottom3"),
         sb.from("payout_rates").select("rates").maybeSingle(),
       ]);
 
@@ -388,13 +388,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (!resultsRes.error) {
         const map: Record<string, DrawResult> = {};
         for (const r of (resultsRes.data ?? []) as Array<DrawResult & { round: string }>) {
-          map[r.round] = { top3: r.top3 ?? "", bottom2: r.bottom2 ?? "", bottom3: r.bottom3 ?? "" };
+          map[r.round] = {
+            top2: r.top2 ?? "",
+            bottom2: r.bottom2 ?? "",
+            top3: r.top3 ?? "",
+            bottom3: r.bottom3 ?? "",
+          };
         }
         setCloudResults(map);
       }
       if (!ratesRes.error && ratesRes.data) {
         const stored = (ratesRes.data as { rates: Partial<PayoutRates> | null }).rates;
-        setCloudRates(stored ? { ...DEFAULT_RATES, ...stored } : DEFAULT_RATES);
+        setCloudRates(normalizeRates(stored));
       }
     } finally {
       window.clearTimeout(slow);
@@ -440,8 +445,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   /* ---------------- ผลรางวัล / อัตราจ่าย ---------------- */
 
-  const result: DrawResult =
-    (mode === "cloud" ? cloudResults[round] : localResults[round]) ?? EMPTY_RESULT;
+  // normalize เผื่อข้อมูลที่เก็บไว้ก่อนหน้านี้ยังเป็นโครงเก่าที่ไม่มีช่อง 2 ตัวบน
+  const storedResult = mode === "cloud" ? cloudResults[round] : localResults[round];
+  const result: DrawResult = storedResult ? normalizeResult(storedResult) : EMPTY_RESULT;
 
   const rates: PayoutRates = mode === "cloud" ? (cloudRates ?? localRates) : localRates;
 
@@ -518,7 +524,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         .select(SELECT);
 
       if (err) {
-        // ฐานข้อมูลยังเป็นสคีมาเก่า ที่ยังไม่รู้จักเลขวิ่งกับ 3 ตัวล่าง
+        // ฐานข้อมูลยังเป็นสคีมาเก่า ที่ยังไม่รู้จักประเภท 3 ตัวล่าง
         setError(
           /entries_type_matches_code|entries_code_format/.test(err.message)
             ? "ฐานข้อมูลยังไม่รองรับประเภทนี้ — ต้องรันไฟล์ supabase/migrations/0002_check_results.sql ใน Supabase ก่อน (SQL Editor)"
