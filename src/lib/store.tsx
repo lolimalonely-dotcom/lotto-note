@@ -367,7 +367,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const [rowsRes, roundsRes, resultsRes, ratesRes] = await Promise.all([
         sb.from(TABLE).select(SELECT).eq("round", round).order("created_at", { ascending: false }),
         sb.from(TABLE).select("round").limit(10000),
-        sb.from("round_results").select("round, top2, bottom2, top3, bottom3"),
+        sb.from("round_results").select("round, raw"),
         sb.from("payout_rates").select("rates").maybeSingle(),
       ]);
 
@@ -387,13 +387,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // ตารางสองอันนี้มาจาก migration 0002 — ถ้ายังไม่ได้รัน ก็ใช้ค่าที่เก็บในเครื่องแทน
       if (!resultsRes.error) {
         const map: Record<string, DrawResult> = {};
-        for (const r of (resultsRes.data ?? []) as Array<DrawResult & { round: string }>) {
-          map[r.round] = {
-            top2: r.top2 ?? "",
-            bottom2: r.bottom2 ?? "",
-            top3: r.top3 ?? "",
-            bottom3: r.bottom3 ?? "",
-          };
+        for (const r of (resultsRes.data ?? []) as Array<{ round: string; raw: unknown }>) {
+          map[r.round] = normalizeResult(r);
         }
         setCloudResults(map);
       }
@@ -524,7 +519,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         .select(SELECT);
 
       if (err) {
-        // ฐานข้อมูลยังเป็นสคีมาเก่า ที่ยังไม่รู้จักประเภท 3 ตัวล่าง
+        // ฐานข้อมูลยังเป็นสคีมาเก่า ที่ยังไม่รู้จักประเภทวิ่ง / 3 ตัวล่าง
         setError(
           /entries_type_matches_code|entries_code_format/.test(err.message)
             ? "ฐานข้อมูลยังไม่รองรับประเภทนี้ — ต้องรันไฟล์ supabase/migrations/0002_check_results.sql ใน Supabase ก่อน (SQL Editor)"

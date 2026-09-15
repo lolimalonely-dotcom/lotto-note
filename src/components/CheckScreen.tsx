@@ -1,88 +1,86 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { checkRound, hasAnyResult, RESULT_LABEL } from "@/lib/check";
+import { checkRound, hasAnyResult, PART_LABEL, parseDraw } from "@/lib/check";
 import { ALL_TYPES, TYPE_FULL } from "@/lib/rules";
 import { useStore } from "@/lib/store";
 import { fmt } from "@/lib/summary";
-import { DEFAULT_RATES, type DrawResult, type PayoutRates } from "@/lib/types";
-import { btn, btnPrimary, card, Empty, input, Money, numInput, TypeBadge } from "./ui";
+import { DEFAULT_RATES, type PayoutRates } from "@/lib/types";
+import { btn, btnPrimary, card, Empty, input, Money, TypeBadge } from "./ui";
 
 /* ------------------------------------------------------------------ */
-/* ช่องกรอกผลรางวัล                                                     */
+/* ช่องใส่ผลรางวัล — ช่องเดียว พิมพ์รวด ระบบแยกตามจำนวนหลักให้เอง         */
 /* ------------------------------------------------------------------ */
-
-const FIELDS: Array<{ key: keyof DrawResult; digits: number }> = [
-  { key: "top2", digits: 2 },
-  { key: "bottom2", digits: 2 },
-  { key: "top3", digits: 3 },
-  { key: "bottom3", digits: 3 },
-];
 
 function ResultForm() {
   const { result, setResult, round } = useStore();
-  const [draft, setDraft] = useState<DrawResult>(result);
-  const [saved, setSaved] = useState(false);
+  const [draft, setDraft] = useState(result.raw);
+  const [seen, setSeen] = useState({ round, raw: result.raw });
 
-  // ถ้าสลับรอบ ให้ช่องกรอกตามรอบใหม่
-  const [seenRound, setSeenRound] = useState(round);
-  if (seenRound !== round) {
-    setSeenRound(round);
-    setDraft(result);
-    setSaved(false);
+  // สลับรอบ หรือผลที่บันทึกไว้โหลดมาจากคลาวด์ทีหลัง ให้ช่องกรอกตามไปด้วย
+  if (seen.round !== round || seen.raw !== result.raw) {
+    setSeen({ round, raw: result.raw });
+    setDraft(result.raw);
   }
 
-  const dirty = FIELDS.some((f) => draft[f.key] !== result[f.key]);
-
-  const badField = FIELDS.find(
-    (f) => draft[f.key] !== "" && draft[f.key].length !== f.digits,
-  );
+  const parsed = parseDraw(draft);
+  const dirty = draft.trim() !== result.raw.trim();
+  const empty = !hasAnyResult(parsed);
 
   return (
     <div className={`${card} p-4`}>
       <h2 className="mb-1 text-lg font-bold">ผลรางวัลรอบนี้</h2>
-      <p className="mb-3 text-base text-muted">ใส่เท่าที่ออกแล้วก็ได้ ช่องที่เว้นไว้จะยังไม่ตรวจ</p>
+      <p className="mb-3 text-base text-muted">
+        พิมพ์ทุกเลขในช่องเดียว คั่นด้วยเว้นวรรคหรือจุด ระบบแยกให้เองตามจำนวนหลัก
+      </p>
 
-      <div className="space-y-3">
-        {FIELDS.map((f) => (
-          <div key={f.key} className="flex items-center gap-3">
-            <span className="w-28 shrink-0 text-base font-semibold text-muted">
-              {RESULT_LABEL[f.key]}
-            </span>
-            <input
-              className={`${numInput} flex-1`}
-              inputMode="numeric"
-              placeholder={"0".repeat(f.digits)}
-              maxLength={f.digits}
-              value={draft[f.key]}
-              onFocus={(e) => e.target.select()}
-              onChange={(e) => {
-                setSaved(false);
-                setDraft((d) => ({
-                  ...d,
-                  [f.key]: e.target.value.replace(/\D/g, "").slice(0, f.digits),
-                }));
-              }}
-            />
-          </div>
-        ))}
-      </div>
+      <textarea
+        className={`${input} keypad-input min-h-28 text-2xl leading-relaxed`}
+        inputMode="decimal"
+        placeholder="123456 789 012 45"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+      />
 
-      {badField ? (
-        <p className="mt-3 text-base font-semibold text-red-600">
-          {RESULT_LABEL[badField.key]} ต้องมี {badField.digits} ตัวเลขพอดี
-        </p>
+      {/* ---------- ระบบอ่านได้ว่าอะไร ---------- */}
+      {!empty || parsed.invalid.length > 0 ? (
+        <ul className="mt-3 space-y-2 rounded-xl bg-surface-2 px-4 py-3 text-base">
+          {parsed.firsts.map((n) => (
+            <li key={n}>
+              <span className="text-muted">รางวัลที่ 1</span>{" "}
+              <b className="keypad-input text-lg">{n}</b>
+              <span className="text-muted"> → 3 ตัวตรง </span>
+              <b className="keypad-input text-lg">{n.slice(-3)}</b>
+              <span className="text-muted"> · 2 ตัวบน </span>
+              <b className="keypad-input text-lg">{n.slice(-2)}</b>
+            </li>
+          ))}
+          {parsed.bottom3.length > 0 ? (
+            <li>
+              <span className="text-muted">3 ตัวล่าง</span>{" "}
+              <b className="keypad-input text-lg">{parsed.bottom3.join(", ")}</b>
+            </li>
+          ) : null}
+          {parsed.bottom2.length > 0 ? (
+            <li>
+              <span className="text-muted">2 ตัวล่าง</span>{" "}
+              <b className="keypad-input text-lg">{parsed.bottom2.join(", ")}</b>
+            </li>
+          ) : null}
+          {parsed.invalid.length > 0 ? (
+            <li className="font-semibold text-red-600 dark:text-red-400">
+              อ่านไม่ออก: {parsed.invalid.join(", ")} — ต้องเป็นเลข 2, 3 หรือ 6 หลักเท่านั้น
+            </li>
+          ) : null}
+        </ul>
       ) : null}
 
       <button
         className={`${btnPrimary} mt-4 h-14 w-full text-lg`}
-        disabled={!dirty || badField !== undefined}
-        onClick={() => {
-          void setResult(draft);
-          setSaved(true);
-        }}
+        disabled={!dirty}
+        onClick={() => void setResult({ raw: draft.trim() })}
       >
-        {dirty ? "บันทึกผลรางวัล" : saved ? "บันทึกแล้ว ✓" : "ยังไม่มีอะไรเปลี่ยน"}
+        {dirty ? "ตรวจรางวัล" : empty ? "พิมพ์ผลรางวัลก่อน" : "ตรวจแล้ว ✓"}
       </button>
     </div>
   );
@@ -162,11 +160,18 @@ function RatesEditor() {
 
 /* ------------------------------------------------------------------ */
 
+/** บอกเลขที่ออกจริง เฉพาะตอนที่ไม่ตรงกับรหัสที่แทง (โต๊ด / วิ่ง) */
+function HitNote({ code, hit }: { code: string; hit: string }) {
+  if (hit === code) return null;
+  return <span className="text-sm text-muted">(ออก {hit})</span>;
+}
+
 export function CheckScreen() {
   const { entries, result, rates, round } = useStore();
-  const summary = useMemo(() => checkRound(entries, result, rates), [entries, result, rates]);
+  const draw = useMemo(() => parseDraw(result.raw), [result.raw]);
+  const summary = useMemo(() => checkRound(entries, draw, rates), [entries, draw, rates]);
 
-  const ready = hasAnyResult(result);
+  const ready = hasAnyResult(draw);
   const winners = summary.byName.filter((n) => n.payout > 0);
 
   return (
@@ -179,7 +184,7 @@ export function CheckScreen() {
         </div>
       ) : !ready ? (
         <div className={card}>
-          <Empty>ใส่ผลรางวัลด้านบนก่อน แล้วระบบจะตรวจให้ทั้งหมดทันที</Empty>
+          <Empty>พิมพ์ผลรางวัลด้านบนแล้วกด ตรวจรางวัล ระบบจะตรวจให้ทุกรายการทีเดียว</Empty>
         </div>
       ) : (
         <>
@@ -215,8 +220,8 @@ export function CheckScreen() {
             </div>
             {summary.pending > 0 ? (
               <p className="mt-3 rounded-xl bg-amber-500/12 px-4 py-3 text-base text-amber-800 dark:text-amber-300">
-                ยังตรวจไม่ได้ {summary.pending} บรรทัด เพราะยังไม่ได้ใส่
-                {summary.missing.map((m) => ` ${RESULT_LABEL[m]}`).join(" และ")}
+                ยังตรวจไม่ได้ {summary.pending} บรรทัด เพราะยังไม่ได้ใส่{" "}
+                {summary.missing.map((m) => PART_LABEL[m]).join(" และ ")}
               </p>
             ) : null}
           </div>
@@ -241,9 +246,10 @@ export function CheckScreen() {
                     </div>
                     <ul className="mt-2 space-y-1.5">
                       {person.wins.map((w) => (
-                        <li key={w.entry.id} className="flex items-center gap-2 text-base">
+                        <li key={w.entry.id} className="flex flex-wrap items-center gap-2 text-base">
                           <TypeBadge type={w.entry.type} />
                           <span className="keypad-input text-lg font-bold">{w.entry.code}</span>
+                          <HitNote code={w.entry.code} hit={w.hit} />
                           <span className="text-muted">แทง {fmt.format(w.entry.amount)}</span>
                           <Money value={w.payout} className="ml-auto font-bold" />
                         </li>
@@ -270,9 +276,10 @@ export function CheckScreen() {
               </div>
               <ul className="divide-y divide-line">
                 {summary.wins.map((w) => (
-                  <li key={w.entry.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <li key={w.entry.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
                     <TypeBadge type={w.entry.type} big />
                     <span className="keypad-input text-xl font-bold">{w.entry.code}</span>
+                    <HitNote code={w.entry.code} hit={w.hit} />
                     <span className="truncate text-base text-muted">{w.entry.name}</span>
                     <Money
                       value={w.payout}

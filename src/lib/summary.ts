@@ -59,7 +59,7 @@ export interface CodeSummary {
   rows: Entry[];
 }
 
-/** สรุปต่อ "เลข" ทุกชื่อรวมกัน — เรียงยอดมากไปน้อย (ดูว่าเลขไหนรับหนัก) */
+/** สรุปต่อ "เลข" ทุกชื่อรวมกัน — เรียงยอดมากไปน้อย */
 export function summarizeByCode(entries: Entry[]): CodeSummary[] {
   const map = new Map<string, CodeSummary>();
   for (const e of entries) {
@@ -80,17 +80,54 @@ export function summarizeByCode(entries: Entry[]): CodeSummary[] {
   return [...map.values()].sort((a, b) => b.total - a.total || a.code.localeCompare(b.code));
 }
 
+export interface TypeBreakdown {
+  type: EntryType;
+  total: number;
+  /** ทุกครั้งที่ซื้อประเภทนี้ เรียงยอดมากไปน้อย */
+  rows: Entry[];
+}
+
+export interface HotCode {
+  code: string;
+  total: number;
+  count: number;
+  /** จำนวนคนที่ซื้อ ไม่นับซ้ำ */
+  people: number;
+  types: TypeBreakdown[];
+}
+
 /**
- * เลขที่มีคนลงซ้ำกันหลายครั้ง — เรียงตามจำนวนครั้งที่ซ้ำมากไปน้อย
- * ใช้ดูว่าเลขไหนคนแห่กันซื้อ ต้องระวังเป็นพิเศษ
+ * เลขที่เงินลงเยอะที่สุด N อันดับ — ใช้แทนการโชว์ทุกเลข
+ * เพราะเลขที่ซื้อน้อยดูไปก็ไม่ช่วยตัดสินใจ
+ * แต่ละเลขแจกแจงว่าลงประเภทไหน รวมเท่าไหร่ และใครซื้อบ้าง
  */
-export function duplicateCodes(entries: Entry[]): CodeSummary[] {
+export function topCodes(entries: Entry[], limit = 10): HotCode[] {
   return summarizeByCode(entries)
-    .filter((row) => row.count > 1)
-    .sort(
-      (a, b) =>
-        b.count - a.count || b.total - a.total || a.code.localeCompare(b.code),
-    );
+    .slice(0, limit)
+    .map((row) => {
+      const byType = new Map<EntryType, Entry[]>();
+      for (const e of row.rows) {
+        const list = byType.get(e.type);
+        if (list) list.push(e);
+        else byType.set(e.type, [e]);
+      }
+      const types = [...byType.entries()]
+        .map(([type, rows]) => ({
+          type,
+          rows,
+          total: rows.reduce((sum, e) => sum + e.amount, 0),
+        }))
+        .sort(
+          (a, b) => b.total - a.total || ALL_TYPES.indexOf(a.type) - ALL_TYPES.indexOf(b.type),
+        );
+      return {
+        code: row.code,
+        total: row.total,
+        count: row.count,
+        people: row.names.length,
+        types,
+      };
+    });
 }
 
 export interface GrandTotals {
@@ -134,4 +171,3 @@ export function toCsv(entries: Entry[]): string {
     );
   return "﻿" + [head.join(","), ...body].join("\r\n");
 }
-

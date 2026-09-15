@@ -1,5 +1,5 @@
 -- ============================================================
---  คีย์เลข — ระบบตรวจรางวัล
+--  คีย์เลข — ประเภทวิ่ง + ระบบตรวจรางวัล
 --  วางทั้งไฟล์ลงใน Supabase Dashboard -> SQL Editor แล้วกด Run
 --
 --  รันซ้ำได้ไม่พัง และรันทับเวอร์ชันเก่าของไฟล์นี้ได้ด้วย
@@ -7,8 +7,8 @@
 
 -- ------------------------------------------------------------
 --  1) ประเภทที่อนุญาต
---     2 หลัก -> บ. / ล.      3 หลัก -> ตรง / ต. / ล.(3 ตัวล่าง)
---     ไม่รับรหัส 1 หลัก
+--     2 หลัก -> บ. / ล. / วิ่ง บ. (วบ) / วิ่ง ล. (วล)
+--     3 หลัก -> ตรง / ต. / ล. 3 ตัวล่าง (ล3)
 -- ------------------------------------------------------------
 
 alter table public.entries drop constraint if exists entries_code_format;
@@ -18,7 +18,7 @@ alter table public.entries
 alter table public.entries drop constraint if exists entries_type_matches_code;
 alter table public.entries
   add constraint entries_type_matches_code check (
-    (length(code) = 2 and type in ('บ', 'ล')) or
+    (length(code) = 2 and type in ('บ', 'ล', 'วบ', 'วล')) or
     (length(code) = 3 and type in ('ตรง', 'ต', 'ล3'))
   ) not valid;
 
@@ -26,33 +26,27 @@ alter table public.entries
 -- (แถวเก่าไม่ถูกลบทิ้ง แต่แถวใหม่ตั้งแต่นี้ไปจะถูกบังคับตามกฎ)
 
 -- ------------------------------------------------------------
---  2) ผลรางวัลของแต่ละรอบ — แยกช่องตามจำนวนหลัก
+--  2) ผลรางวัลของแต่ละรอบ
+--     เก็บเป็นข้อความตามที่พิมพ์ เช่น '123456 789 012 45'
+--     แอปแยกตามจำนวนหลักเองตอนตรวจ
 -- ------------------------------------------------------------
 
 create table if not exists public.round_results (
   user_id    uuid        not null default auth.uid() references auth.users (id) on delete cascade,
   round      text        not null,
-  top2       text        not null default '',
-  bottom2    text        not null default '',
-  top3       text        not null default '',
-  bottom3    text        not null default '',
+  raw        text        not null default '',
   updated_at timestamptz not null default now(),
   primary key (user_id, round)
 );
 
--- เผื่อเคยรันไฟล์เวอร์ชันก่อนหน้าที่ยังไม่มีช่อง 2 ตัวบน
-alter table public.round_results add column if not exists top2 text not null default '';
+-- เผื่อเคยรันไฟล์เวอร์ชันก่อนหน้า ที่เก็บผลแยกเป็นช่องๆ
+alter table public.round_results add column if not exists raw text not null default '';
 
+-- ช่องแบบเก่า (ถ้ามี) ไม่ใช้แล้ว ถอดข้อจำกัดออกไม่ให้ขวางการบันทึก
 alter table public.round_results drop constraint if exists round_results_top2;
 alter table public.round_results drop constraint if exists round_results_bottom2;
 alter table public.round_results drop constraint if exists round_results_top3;
 alter table public.round_results drop constraint if exists round_results_bottom3;
-
-alter table public.round_results
-  add constraint round_results_top2    check (top2    = '' or top2    ~ '^[0-9]{2}$'),
-  add constraint round_results_bottom2 check (bottom2 = '' or bottom2 ~ '^[0-9]{2}$'),
-  add constraint round_results_top3    check (top3    = '' or top3    ~ '^[0-9]{3}$'),
-  add constraint round_results_bottom3 check (bottom3 = '' or bottom3 ~ '^[0-9]{3}$');
 
 alter table public.round_results enable row level security;
 

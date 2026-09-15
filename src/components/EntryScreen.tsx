@@ -2,7 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { permutations } from "@/lib/permute";
-import { canPermute, isValidCode, TYPE_FULL, TYPE_LABEL, typesForCode } from "@/lib/rules";
+import {
+  canPermute,
+  isRun,
+  isValidCode,
+  TYPE_FULL,
+  TYPE_LABEL,
+  typesForCode,
+} from "@/lib/rules";
 import { useStore } from "@/lib/store";
 import { fmt } from "@/lib/summary";
 import type { DraftRow, Entry, EntryType } from "@/lib/types";
@@ -156,13 +163,15 @@ export function EntryScreen() {
   const permutable = canPermute(digits);
   const permuteOn = permute && permutable;
   const codes = codeOk ? (permuteOn ? permutations(digits) : [digits]) : [];
+  // เลขที่วิ่งคลุมอยู่ — วิ่งไม่ต้องติ๊กกลับเลข เพราะคลุมเลขกลับให้เองในบรรทัดเดียว
+  const runCovers = codeOk ? permutations(digits) : [];
 
   const rows: DraftRow[] = [];
-  for (const c of codes) {
-    for (const t of picked) {
-      const value = Number((amounts[t] ?? "").replace(/,/g, ""));
-      if (Number.isFinite(value) && value > 0) rows.push({ code: c, type: t, amount: value });
-    }
+  for (const t of picked) {
+    const value = Number((amounts[t] ?? "").replace(/,/g, ""));
+    if (!Number.isFinite(value) || value <= 0) continue;
+    const targets = isRun(t) ? [digits] : codes;
+    for (const c of targets) rows.push({ code: c, type: t, amount: value });
   }
   const rowsTotal = rows.reduce((s, r) => s + r.amount, 0);
   const missingAmount = picked.some((t) => {
@@ -200,7 +209,7 @@ export function EntryScreen() {
         {/* ---------- รหัส ---------- */}
         <div>
           <label className={label} htmlFor="code">
-            รหัส — 2 ตัว = บน/ล่าง · 3 ตัว = ตรง/โต๊ด/ล่าง
+            รหัส — 2 ตัว = บน/ล่าง/วิ่ง · 3 ตัว = ตรง/โต๊ด/ล่าง
           </label>
           <input
             id="code"
@@ -247,7 +256,7 @@ export function EntryScreen() {
               ใส่รหัสก่อน แล้วปุ่มประเภทจะขึ้นมาให้เลือก
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className={`grid grid-cols-2 gap-3 ${allowed.length === 3 ? "sm:grid-cols-3" : ""}`}>
               {allowed.map((t) => {
                 const on = picked.includes(t);
                 return (
@@ -271,26 +280,35 @@ export function EntryScreen() {
         {/* ---------- จำนวน ---------- */}
         {picked.length > 0 ? (
           <div>
-            <span className={label}>
-              จำนวน{permuteOn ? " (ต่อเลข 1 ตัว)" : ""}
-            </span>
-            <div className="space-y-3">
+            <span className={label}>จำนวน</span>
+            <div className="space-y-4">
               {allowed
                 .filter((t) => picked.includes(t))
                 .map((t) => (
-                  <div key={t} className="flex items-center gap-3">
-                    <TypeBadge type={t} big />
-                    <input
-                      className={`${numInput} flex-1`}
-                      inputMode="decimal"
-                      placeholder="0"
-                      value={amounts[t] ?? ""}
-                      onChange={(e) => setAmounts((a) => ({ ...a, [t]: e.target.value }))}
-                      onFocus={(e) => e.target.select()}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") void save();
-                      }}
-                    />
+                  <div key={t}>
+                    <div className="flex items-center gap-3">
+                      <TypeBadge type={t} big />
+                      <input
+                        className={`${numInput} flex-1`}
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={amounts[t] ?? ""}
+                        onChange={(e) => setAmounts((a) => ({ ...a, [t]: e.target.value }))}
+                        onFocus={(e) => e.target.select()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void save();
+                        }}
+                      />
+                    </div>
+                    {isRun(t) ? (
+                      <p className="mt-1 text-base text-muted">
+                        ราคาเหมา คลุม {runCovers.join(", ")}
+                      </p>
+                    ) : permuteOn && codes.length > 1 ? (
+                      <p className="mt-1 text-base text-muted">
+                        ต่อเลข 1 ตัว × {codes.length} ตัว
+                      </p>
+                    ) : null}
                   </div>
                 ))}
             </div>

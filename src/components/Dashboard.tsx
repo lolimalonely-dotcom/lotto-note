@@ -1,25 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useStore } from "@/lib/store";
-import {
-  duplicateCodes,
-  fmt,
-  grandTotals,
-  summarizeByCode,
-  summarizeByName,
-  toCsv,
-} from "@/lib/summary";
+import { fmt, grandTotals, summarizeByName, toCsv, topCodes } from "@/lib/summary";
 import { btn, card, Empty, Money, Stat, TypeBadge } from "./ui";
 
 export function Dashboard() {
   const { entries, round } = useStore();
-  const [tab, setTab] = useState<"name" | "code">("name");
 
   const totals = useMemo(() => grandTotals(entries), [entries]);
+  const hot = useMemo(() => topCodes(entries, 10), [entries]);
   const byName = useMemo(() => summarizeByName(entries), [entries]);
-  const byCode = useMemo(() => summarizeByCode(entries), [entries]);
-  const dupes = useMemo(() => duplicateCodes(entries), [entries]);
 
   const download = () => {
     const blob = new Blob([toCsv(entries)], { type: "text/csv;charset=utf-8" });
@@ -48,99 +39,70 @@ export function Dashboard() {
         <Stat label="เลขไม่ซ้ำ" value={totals.codes} />
       </div>
 
-      {/* ---------- เลขที่คนลงซ้ำกัน ---------- */}
-      {dupes.length > 0 ? (
-        <div className={card}>
-          <div className="border-b border-line px-4 py-3">
-            <h2 className="text-lg font-bold">เลขที่มีคนลงซ้ำกัน</h2>
-            <p className="text-base text-muted">เรียงจากซ้ำมากที่สุด — ใช้ดูว่าเลขไหนต้องระวัง</p>
-          </div>
-          <ul className="divide-y divide-line">
-            {dupes.slice(0, 10).map((row) => (
-              <li key={row.code} className="flex items-center gap-3 px-4 py-3">
-                <span className="keypad-input text-2xl font-bold">{row.code}</span>
-                <span className="rounded-lg bg-surface-2 px-2 py-1 text-base font-semibold">
-                  ซ้ำ {row.count} ครั้ง
-                </span>
-                <span className="ml-auto text-right">
-                  <Money value={row.total} className="text-xl font-bold" />
-                  <span className="block text-sm text-muted">{row.names.length} คน</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          {dupes.length > 10 ? (
-            <p className="px-4 py-2 text-sm text-muted">แสดง 10 อันดับแรกจาก {dupes.length} เลข</p>
-          ) : null}
+      {/* ---------- 10 เลขที่เงินลงเยอะที่สุด ---------- */}
+      <div className={card}>
+        <div className="border-b border-line px-4 py-3">
+          <h2 className="text-lg font-bold">
+            {hot.length < 10 ? `เลขที่เงินลงเยอะที่สุด` : `10 เลขที่เงินลงเยอะที่สุด`}
+          </h2>
+          <p className="text-base text-muted">แจกแจงว่าซื้อประเภทไหน ใครซื้อ เท่าไหร่</p>
         </div>
-      ) : null}
+        <ol className="divide-y divide-line">
+          {hot.map((row, i) => (
+            <li key={row.code} className="px-4 py-4">
+              <div className="flex items-baseline gap-3">
+                <span className="w-7 shrink-0 text-base font-bold text-muted">{i + 1}.</span>
+                <span className="keypad-input text-3xl font-extrabold">{row.code}</span>
+                <span className="ml-auto text-right">
+                  <Money value={row.total} className="text-2xl font-extrabold" />
+                  <span className="block text-sm text-muted">
+                    ซื้อ {row.count} ครั้ง · {row.people} คน
+                  </span>
+                </span>
+              </div>
 
-      {/* ---------- สลับมุมมอง ---------- */}
-      <div className="no-print flex gap-2 rounded-2xl border border-line bg-surface p-1.5">
-        {(
-          [
-            ["name", "ดูตามชื่อคน"],
-            ["code", "ดูตามเลข"],
-          ] as const
-        ).map(([key, text]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`min-h-12 flex-1 rounded-xl text-lg font-bold transition ${
-              tab === key ? "bg-accent text-accent-fg" : "text-muted hover:bg-surface-2"
-            }`}
-          >
-            {text}
-          </button>
-        ))}
+              <ul className="mt-3 space-y-3 sm:pl-10">
+                {row.types.map((t) => (
+                  <li key={t.type} className="rounded-xl bg-surface-2 px-3 py-2">
+                    <div className="flex items-center gap-3">
+                      <TypeBadge type={t.type} big />
+                      <Money value={t.total} className="text-xl font-bold" />
+                      {t.rows.length > 1 ? (
+                        <span className="text-sm text-muted">({t.rows.length} ครั้ง)</span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-base text-muted">
+                      {t.rows.map((e) => `${e.name} ${fmt.format(e.amount)}`).join(" · ")}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ol>
       </div>
 
-      {/* ---------- ตามชื่อคน ---------- */}
-      {tab === "name" ? (
-        <div className="space-y-3">
-          {byName.map((row) => (
-            <div key={row.name} className={card}>
-              <div className="flex items-baseline justify-between border-b border-line px-4 py-3">
-                <h3 className="truncate text-lg font-bold">{row.name}</h3>
-                <Money value={row.total} className="text-2xl font-extrabold" />
-              </div>
-              <ul className="divide-y divide-line">
-                {row.entries.map((e) => (
-                  <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <TypeBadge type={e.type} big />
-                    <span className="keypad-input text-xl font-bold">{e.code}</span>
-                    <Money value={e.amount} className="ml-auto text-lg font-semibold" />
-                  </li>
-                ))}
-              </ul>
+      {/* ---------- แยกตามชื่อคน ---------- */}
+      <h2 className="px-1 pt-2 text-lg font-bold">แยกตามชื่อคน</h2>
+      <div className="space-y-3">
+        {byName.map((row) => (
+          <div key={row.name} className={card}>
+            <div className="flex items-baseline justify-between border-b border-line px-4 py-3">
+              <h3 className="truncate text-lg font-bold">{row.name}</h3>
+              <Money value={row.total} className="text-2xl font-extrabold" />
             </div>
-          ))}
-        </div>
-      ) : (
-        /* ---------- ตามเลข แจกแจงทีละบรรทัด ---------- */
-        <div className="space-y-3">
-          {byCode.map((row) => (
-            <div key={row.code} className={card}>
-              <div className="flex items-baseline justify-between border-b border-line px-4 py-3">
-                <h3 className="keypad-input text-2xl font-extrabold">{row.code}</h3>
-                <span className="text-right">
-                  <Money value={row.total} className="text-2xl font-extrabold" />
-                  <span className="block text-sm text-muted">{row.count} บรรทัด</span>
-                </span>
-              </div>
-              <ul className="divide-y divide-line">
-                {row.rows.map((e) => (
-                  <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <TypeBadge type={e.type} big />
-                    <Money value={e.amount} className="text-lg font-bold" />
-                    <span className="ml-auto truncate text-base text-muted">{e.name}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
+            <ul className="divide-y divide-line">
+              {row.entries.map((e) => (
+                <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <TypeBadge type={e.type} big />
+                  <span className="keypad-input text-xl font-bold">{e.code}</span>
+                  <Money value={e.amount} className="ml-auto text-lg font-semibold" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
 
       <div className="no-print flex gap-2 pt-2">
         <button className={btn} onClick={download}>
